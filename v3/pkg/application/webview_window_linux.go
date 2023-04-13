@@ -411,7 +411,11 @@ func (w *linuxWebviewWindow) setMaxSize(width, height int) {
 }
 
 func (w *linuxWebviewWindow) setResizable(resizable bool) {
-	C.gtk_window_set_resizable(C.GTKWINDOW(w.window), 1)
+	if resizable {
+		C.gtk_window_set_resizable(C.GTKWINDOW(w.window), 1)
+	} else {
+		C.gtk_window_set_resizable(C.GTKWINDOW(w.window), 0)
+	}
 }
 
 func (w *linuxWebviewWindow) enableDevTools() {
