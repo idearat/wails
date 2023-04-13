@@ -403,11 +403,8 @@ func (w *linuxWebviewWindow) setMinSize(width, height int) {
 	C.gtk_window_set_geometry_hints(C.GTKWINDOW(w.window), nil, &size, C.GDK_HINT_MIN_SIZE)
 }
 func (w *linuxWebviewWindow) setMaxSize(width, height int) {
-	size := C.GdkGeometry{}
-	size.max_width = 0
-	size.max_height = 0
-
-	// C.gtk_window_set_geometry_hints(C.GTKWINDOW(w.window), NULL, &size, flags);
+	size := C.GdkGeometry{max_width: C.int(width), max_height: C.int(height)}
+	C.gtk_window_set_geometry_hints(C.GTKWINDOW(w.window), C.GTKWIDGET(C.NULL), &size, C.GDK_HINT_MAX_SIZE)
 }
 
 func (w *linuxWebviewWindow) setResizable(resizable bool) {
