@@ -265,9 +265,41 @@ func (w *linuxWebviewWindow) forceReload() {
 	println("forceReload called on WebviewWindow", w.parent.id)
 }
 
+func (w linuxWebviewWindow) getCurrentMonitor() *C.GdkMonitor {
+	// Get the monitor that the window is currently on
+	display := C.gtk_widget_get_display(C.GTKWIDGET(w.window))
+	gdk_window := C.gtk_widget_get_window(C.GTKWIDGET(w.window))
+	if gdk_window == nil {
+		return nil
+	}
+	return C.gdk_display_get_monitor_at_window(display, gdk_window)
+}
+
+func (w linuxWebviewWindow) getCurrentMonitorGeometry() (x int, y int, width int, height int) {
+	monitor := w.getCurrentMonitor()
+	if monitor == nil {
+		return -1, -1, -1, -1
+	}
+	var result C.GdkRectangle
+	C.gdk_monitor_get_geometry(monitor, &result)
+	return int(result.x), int(result.y), int(result.width), int(result.height)
+}
+
 func (w *linuxWebviewWindow) center() {
-	//C.windowCenter(w.nsWindow)
-	fmt.Println("center")
+	x, y, width, height := w.getCurrentMonitorGeometry()
+	if x == -1 && y == -1 && width == -1 && height == -1 {
+		return
+	}
+
+	var windowWidth C.int
+	var windowHeight C.int
+	C.gtk_window_get_size(C.GTKWINDOW(w.window), &windowWidth, &windowHeight)
+
+	newX := C.int(((width - int(windowWidth)) / 2) + x)
+	newY := C.int(((height - int(windowHeight)) / 2) + y)
+
+	// Place the window at the center of the monitor
+	C.gtk_window_move(C.GTKWINDOW(w.window), newX, newY)
 }
 
 func (w *linuxWebviewWindow) isMinimised() bool {
@@ -448,28 +480,12 @@ func (w *linuxWebviewWindow) run() {
 		// FIXME: This should either use the Linux options or a common set
 		macOptions := w.parent.options.Mac
 		switch macOptions.Backdrop {
-		case MacBackdropTransparent:
-			fmt.Println("MacBackdropTransparent - not implemented")
-			//C.windowSetTransparent(w.nsWindow)
-			//C.webviewSetTransparent(w.nsWindow)
-		case MacBackdropTranslucent:
-			fmt.Println("MacBackdropTranslucent - not implemented")
-			//C.windowSetTranslucent(w.nsWindow)
-			//C.webviewSetTransparent(w.nsWindow)
+		case MacBackdropTransparent, MacBackdropTranslucent:
+			w.setTransparent()
 		}
 
 		//		titleBarOptions := macOptions.TitleBar
 		w.setFrameless(w.parent.options.Frameless)
-		if macOptions.Appearance != "" {
-			//C.windowSetAppearanceTypeByName(w.nsWindow, C.CString(string(macOptions.Appearance)))
-			fmt.Println("Appearance: ", macOptions.Appearance)
-		}
-
-		if macOptions.InvisibleTitleBarHeight != 0 {
-
-			fmt.Println("InvisibleTitleBarHeight - not implemented")
-			//C.windowSetInvisibleTitleBar(w.nsWindow, C.uint(macOptions.InvisibleTitleBarHeight))
-		}
 
 		switch w.parent.options.StartState {
 		case WindowStateMaximised:
@@ -478,7 +494,6 @@ func (w *linuxWebviewWindow) run() {
 			w.minimise()
 		case WindowStateFullscreen:
 			w.fullscreen()
-
 		}
 		w.center()
 
@@ -504,12 +519,22 @@ func (w *linuxWebviewWindow) run() {
 	})
 }
 
+func (w *linuxWebviewWindow) setTransparent() {
+	screen := C.gtk_widget_get_screen(C.GTKWIDGET(w.window))
+	visual := C.gdk_screen_get_rgba_visual(screen)
+
+	if visual != nil && C.gdk_screen_is_composited(screen) == C.int(1) {
+		C.gtk_widget_set_app_paintable(C.GTKWIDGET(w.window), C.gboolean(1))
+		C.gtk_widget_set_visual(C.GTKWIDGET(w.window), visual)
+	}
+}
+
 func (w *linuxWebviewWindow) setBackgroundColour(colour *RGBA) {
 	if colour == nil {
 		return
 	}
-	//C.windowSetBackgroundColour(w.nsWindow, C.int(colour.Red), C.int(colour.Green), C.int(colour.Blue), C.int(colour.Alpha))
-	fmt.Println("SetBackgroundColour", colour)
+	rgba := C.GdkRGBA{C.double(colour.Red) / 255.0, C.double(colour.Green) / 255.0, C.double(colour.Blue) / 255.0, C.double(colour.Alpha) / 255.0}
+	C.webkit_web_view_set_background_color(C.WEBKITWEBVIEW(w.webview), &rgba)
 }
 
 func (w *linuxWebviewWindow) position() (int, int) {
