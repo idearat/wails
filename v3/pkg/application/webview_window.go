@@ -33,7 +33,7 @@ type (
 		openContextMenu(menu *Menu, data *ContextMenuData)
 		position() (int, int)
 		reload()
-		restore()
+		restore() // FIXME: not used
 		run()
 		setAlwaysOnTop(alwaysOnTop bool)
 		setBackgroundColour(color *RGBA)
