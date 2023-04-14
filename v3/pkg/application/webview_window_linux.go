@@ -395,13 +395,36 @@ func (w *linuxWebviewWindow) setTitle(title string) {
 }
 
 func (w *linuxWebviewWindow) setSize(width, height int) {
-	C.gtk_window_set_default_size(C.GTKWINDOW(w.window), C.int(width), C.int(height))
+	C.gtk_window_resize(C.GTKWINDOW(w.window), C.gint(width), C.gint(height))
+}
+
+func (w *linuxWebviewWindow) setMinMaxSize(minWidth, minHeight, maxWidth, maxHeight int) {
+	if minWidth == 0 {
+		minWidth = -1
+	}
+	if minHeight == 0 {
+		minHeight = -1
+	}
+	if maxWidth == 0 {
+		maxWidth = -1
+	}
+	if maxHeight == 0 {
+		maxHeight = -1
+	}
+	size := C.GdkGeometry{
+		min_width:  C.int(minWidth),
+		min_height: C.int(minHeight),
+		max_width:  C.int(maxWidth),
+		max_height: C.int(maxHeight),
+	}
+	C.gtk_window_set_geometry_hints(C.GTKWINDOW(w.window), nil, &size, C.GDK_HINT_MAX_SIZE|C.GDK_HINT_MIN_SIZE)
 }
 
 func (w *linuxWebviewWindow) setMinSize(width, height int) {
 	size := C.GdkGeometry{min_width: C.int(width), min_height: C.int(height)}
 	C.gtk_window_set_geometry_hints(C.GTKWINDOW(w.window), nil, &size, C.GDK_HINT_MIN_SIZE)
 }
+
 func (w *linuxWebviewWindow) setMaxSize(width, height int) {
 	size := C.GdkGeometry{max_width: C.int(width), max_height: C.int(height)}
 	C.gtk_window_set_geometry_hints(C.GTKWINDOW(w.window), C.GTKWIDGET(C.NULL), &size, C.GDK_HINT_MAX_SIZE)
@@ -463,17 +486,22 @@ func (w *linuxWebviewWindow) run() {
 			C.gtk_box_pack_start(C.GTKBOX(unsafe.Pointer(w.vbox)), w.menubar, 0, 0, 0)
 		}
 		C.gtk_box_pack_start(C.GTKBOX(unsafe.Pointer(w.vbox)), C.GTKWIDGET(w.webview), 1, 1, 0)
-
-		w.setSize(w.parent.options.Width, w.parent.options.Height)
 		w.setTitle(w.parent.options.Title)
 		w.setAlwaysOnTop(w.parent.options.AlwaysOnTop)
 		w.setResizable(!w.parent.options.DisableResize)
-		if w.parent.options.MinWidth != 0 || w.parent.options.MinHeight != 0 {
-			w.setMinSize(w.parent.options.MinWidth, w.parent.options.MinHeight)
+		// only set min/max size if actually set
+		if w.parent.options.MinWidth != 0 &&
+			w.parent.options.MinHeight != 0 &&
+			w.parent.options.MaxWidth != 0 &&
+			w.parent.options.MaxHeight != 0 {
+			w.setMinMaxSize(
+				w.parent.options.MinWidth,
+				w.parent.options.MinHeight,
+				w.parent.options.MaxWidth,
+				w.parent.options.MaxHeight,
+			)
 		}
-		if w.parent.options.MaxWidth != 0 || w.parent.options.MaxHeight != 0 {
-			w.setMaxSize(w.parent.options.MaxWidth, w.parent.options.MaxHeight)
-		}
+		w.setSize(w.parent.options.Width, w.parent.options.Height)
 		w.setZoom(w.parent.options.Zoom)
 		w.enableDevTools()
 		w.setBackgroundColour(w.parent.options.BackgroundColour)
