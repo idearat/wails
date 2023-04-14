@@ -17,6 +17,11 @@ typedef struct Window
     uint id;
 } Window;
 
+GdkWindow *GDKWINDOW(void *pointer)
+{
+    return GDK_WINDOW(pointer);
+}
+
 GtkApplication *GTKAPPLICATION(void *pointer)
 {
     return GTK_APPLICATION(pointer);
@@ -90,7 +95,8 @@ type linuxWebviewWindow struct {
 		menu                          *menu.Menu
 		accels                                   *C.GtkAccelGroup
 	*/
-	minWidth, minHeight, maxWidth, maxHeight int
+	lastWidth  int
+	lastHeight int
 }
 
 func (w *linuxWebviewWindow) newWebview(gpuPolicy int) unsafe.Pointer {
@@ -105,11 +111,9 @@ func (w *linuxWebviewWindow) newWebview(gpuPolicy int) unsafe.Pointer {
 	C.webkit_web_context_register_uri_scheme(C.webkit_web_context_get_default(), wails,
 		C.WebKitURISchemeRequestCallback(C.processRequest), C.gpointer(&w.metadata), nil)
 	C.free(unsafe.Pointer(wails))
+
+	//C.g_signal_connect(C.GTKWIDGET(w.window), "delete-event", G_CALLBACK(gtk_widget_hide_on_delete), NULL)
 	//    g_signal_connect(G_OBJECT(webview), "load-changed", G_CALLBACK(webviewLoadChanged), window);
-	// if (hideWindowOnClose)
-	// {
-	//     g_signal_connect(GTKWIDGET(window), "delete-event", G_CALLBACK(gtk_widget_hide_on_delete), NULL);
-	// }
 	// else
 	// {
 	//     g_signal_connect(GTKWIDGET(window), "delete-event", G_CALLBACK(close_button_pressed), window);
@@ -169,49 +173,63 @@ func (w *linuxWebviewWindow) getScreen() (*Screen, error) {
 }
 
 func (w *linuxWebviewWindow) show() {
-	fmt.Println("linuxWebviewWindow.show()")
 	globalApplication.dispatchOnMainThread(func() {
 		C.gtk_widget_show_all(C.GTKWIDGET(w.window))
 	})
 }
 
 func (w *linuxWebviewWindow) hide() {
-	fmt.Println("linuxWebviewWindow.hide()")
 	C.gtk_widget_hide(C.GTKWIDGET(w.window))
 }
 
 func (w *linuxWebviewWindow) setFullscreenButtonEnabled(enabled bool) {
 	//	C.setFullscreenButtonEnabled(w.nsWindow, C.bool(enabled))
-	fmt.Println("setFullscreenButtonEnabled")
+	fmt.Println("setFullscreenButtonEnabled - not implemented")
 }
 
 func (w *linuxWebviewWindow) disableSizeConstraints() {
-	fmt.Println("disableSizeConstraints")
-	//C.windowDisableSizeConstraints(w.nsWindow)
+	_, _, width, height, scale := w.getCurrentMonitorGeometry()
+	w.setMinMaxSize(1, 1, width*scale, height*scale)
 }
 
 func (w *linuxWebviewWindow) unfullscreen() {
 	fmt.Println("unfullscreen")
+	w.setSize(w.lastWidth, w.lastHeight)
+	globalApplication.dispatchOnMainThread(func() {
+		C.gtk_window_unfullscreen(C.GTKWINDOW(w.window))
+	})
 }
 
 func (w *linuxWebviewWindow) fullscreen() {
-	fmt.Println("fullscreen")
+	w.lastWidth, w.lastHeight = w.size()
+	globalApplication.dispatchOnMainThread(func() {
+		x, y, width, height, scale := w.getCurrentMonitorGeometry()
+		if x == -1 && y == -1 && width == -1 && height == -1 {
+			return
+		}
+		fmt.Println("fullscreen", width, height, scale)
+		w.setMinMaxSize(0, 0, width*scale, height*scale)
+		w.setSize(width*scale, height*scale)
+		C.gtk_window_fullscreen(C.GTKWINDOW(w.window))
+	})
+	w.setPosition(0, 0)
 }
 
 func (w *linuxWebviewWindow) unminimise() {
-	fmt.Println("unminimise")
+	C.gtk_window_present(C.GTKWINDOW(w.window))
+	// gtk_window_unminimize (C.GTKWINDOW(w.window)) /// gtk4
 }
 
 func (w *linuxWebviewWindow) unmaximise() {
-	fmt.Println("unmaximise")
+	C.gtk_window_unmaximize(C.GTKWINDOW(w.window))
 }
 
 func (w *linuxWebviewWindow) maximise() {
-	fmt.Println("maximise")
+	C.gtk_window_maximize(C.GTKWINDOW(w.window))
 }
 
 func (w *linuxWebviewWindow) minimise() {
-	fmt.Println("minimise")
+	C.gtk_window_iconify(C.GTKWINDOW(w.window))
 }
 
 func (w *linuxWebviewWindow) on(eventID uint) {
@@ -261,8 +279,7 @@ func (w *linuxWebviewWindow) reload() {
 }
 
 func (w *linuxWebviewWindow) forceReload() {
-	//TODO: Implement
-	println("forceReload called on WebviewWindow", w.parent.id)
+	w.reload()
 }
 
 func (w linuxWebviewWindow) getCurrentMonitor() *C.GdkMonitor {
@@ -275,18 +292,19 @@ func (w linuxWebviewWindow) getCurrentMonitor() *C.GdkMonitor {
 	return C.gdk_display_get_monitor_at_window(display, gdk_window)
 }
 
-func (w linuxWebviewWindow) getCurrentMonitorGeometry() (x int, y int, width int, height int) {
+func (w linuxWebviewWindow) getCurrentMonitorGeometry() (x int, y int, width int, height int, scale int) {
 	monitor := w.getCurrentMonitor()
 	if monitor == nil {
-		return -1, -1, -1, -1
+		return -1, -1, -1, -1, 1
 	}
 	var result C.GdkRectangle
 	C.gdk_monitor_get_geometry(monitor, &result)
-	return int(result.x), int(result.y), int(result.width), int(result.height)
+	scale = int(C.gdk_monitor_get_scale_factor(monitor))
+	return int(result.x), int(result.y), int(result.width), int(result.height), scale
 }
 
 func (w *linuxWebviewWindow) center() {
-	x, y, width, height := w.getCurrentMonitorGeometry()
+	x, y, width, height, _ := w.getCurrentMonitorGeometry()
 	if x == -1 && y == -1 && width == -1 && height == -1 {
 		return
 	}
@@ -303,27 +321,25 @@ func (w *linuxWebviewWindow) center() {
 }
 
 func (w *linuxWebviewWindow) isMinimised() bool {
-	return w.syncMainThreadReturningBool(func() bool {
-		// FIXME: add in check here
-		return false
-		//return bool(C.windowIsMinimised(w.nsWindow))
-	})
+	gdkwindow := C.gtk_widget_get_window(C.GTKWIDGET(w.window))
+	state := C.gdk_window_get_state(gdkwindow)
+	return state&C.GDK_WINDOW_STATE_ICONIFIED > 0
 }
 
 func (w *linuxWebviewWindow) isMaximised() bool {
-	// return w.syncMainThreadReturningBool(func() bool {
-	// 	return bool(C.windowIsMaximised(w.nsWindow))
-	// })
-	fmt.Println("isMaximised")
-	return false
+	return w.syncMainThreadReturningBool(func() bool {
+		gdkwindow := C.gtk_widget_get_window(C.GTKWIDGET(w.window))
+		state := C.gdk_window_get_state(gdkwindow)
+		return state&C.GDK_WINDOW_STATE_MAXIMIZED > 0 && state&C.GDK_WINDOW_STATE_FULLSCREEN == 0
+	})
 }
 
 func (w *linuxWebviewWindow) isFullscreen() bool {
-	fmt.Println("isFullscreen")
-	// return w.syncMainThreadReturningBool(func() bool {
-	// 	return bool(C.windowIsFullscreen(w.nsWindow))
-	// })
-	return false
+	return w.syncMainThreadReturningBool(func() bool {
+		gdkwindow := C.gtk_widget_get_window(C.GTKWIDGET(w.window))
+		state := C.gdk_window_get_state(gdkwindow)
+		return state&C.GDK_WINDOW_STATE_FULLSCREEN > 0
+	})
 }
 
 func (w *linuxWebviewWindow) syncMainThreadReturningBool(fn func() bool) bool {
@@ -340,11 +356,7 @@ func (w *linuxWebviewWindow) syncMainThreadReturningBool(fn func() bool) bool {
 
 func (w *linuxWebviewWindow) restore() {
 	// restore window to normal size
-	fmt.Println("restore")
-}
-
-func (w *linuxWebviewWindow) restoreWindow() {
-	fmt.Println("restoreWindow") // what's the difference with "restore"?
+	// FIXME: never called!  - remove from webviewImpl interface
 }
 
 func (w *linuxWebviewWindow) execJS(js string) {
@@ -399,18 +411,18 @@ func (w *linuxWebviewWindow) setSize(width, height int) {
 }
 
 func (w *linuxWebviewWindow) setMinMaxSize(minWidth, minHeight, maxWidth, maxHeight int) {
-	if minWidth == 0 {
-		minWidth = -1
-	}
-	if minHeight == 0 {
-		minHeight = -1
-	}
-	if maxWidth == 0 {
-		maxWidth = -1
-	}
-	if maxHeight == 0 {
-		maxHeight = -1
-	}
+	// if minWidth == 0 {
+	// 	minWidth = -1
+	// }
+	// if minHeight == 0 {
+	// 	minHeight = -1
+	// }
+	// if maxWidth == 0 {
+	// 	maxWidth = -1
+	// }
+	// if maxHeight == 0 {
+	// 	maxHeight = -1
+	// }
 	size := C.GdkGeometry{
 		min_width:  C.int(minWidth),
 		min_height: C.int(minHeight),
@@ -456,8 +468,10 @@ func (w *linuxWebviewWindow) size() (int, int) {
 }
 
 func (w *linuxWebviewWindow) setPosition(x, y int) {
-	fmt.Println("setPosition")
-	//	C.windowSetPosition(w.nsWindow, C.int(x), C.int(y))
+	mx, my, _, _, _ := w.getCurrentMonitorGeometry()
+	globalApplication.dispatchOnMainThread(func() {
+		C.gtk_window_move(C.GTKWINDOW(w.window), C.int(x+mx), C.int(y+my))
+	})
 }
 
 func (w *linuxWebviewWindow) width() int {
@@ -475,9 +489,7 @@ func (w *linuxWebviewWindow) run() {
 		w.on(eventId)
 	}
 	globalApplication.dispatchOnMainThread(func() {
-		// FIXME: Should the application be passed to the window instead?
-		app := (globalApplication.impl).(*linuxApp).application
-		w.window = unsafe.Pointer(C.gtk_application_window_new(C.GTKAPPLICATION(app)))
+		w.window = unsafe.Pointer(C.gtk_application_window_new(C.GTKAPPLICATION(w.application)))
 		C.g_object_ref_sink(C.gpointer(w.window))
 		w.webview = w.newWebview(1)
 		w.vbox = C.gtk_box_new(C.GTK_ORIENTATION_VERTICAL, 0)
@@ -565,7 +577,7 @@ func (w *linuxWebviewWindow) position() (int, int) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go globalApplication.dispatchOnMainThread(func() {
-		//C.windowGetPosition(w.nsWindow, &x, &y)
+		C.gtk_window_get_position(C.GTKWINDOW(w.window), &x, &y)
 		wg.Done()
 	})
 	wg.Wait()
