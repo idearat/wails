@@ -188,26 +188,27 @@ func (w *linuxWebviewWindow) setFullscreenButtonEnabled(enabled bool) {
 }
 
 func (w *linuxWebviewWindow) disableSizeConstraints() {
-	_, _, width, height, scale := w.getCurrentMonitorGeometry()
-	w.setMinMaxSize(1, 1, width*scale, height*scale)
+	x, y, width, height, scale := w.getCurrentMonitorGeometry()
+	w.setMinMaxSize(x, y, width*scale, height*scale)
 }
 
 func (w *linuxWebviewWindow) unfullscreen() {
 	fmt.Println("unfullscreen")
-	w.setSize(w.lastWidth, w.lastHeight)
 	globalApplication.dispatchOnMainThread(func() {
 		C.gtk_window_unfullscreen(C.GTKWINDOW(w.window))
 	})
+	w.unmaximise()
 }
 
 func (w *linuxWebviewWindow) fullscreen() {
+	w.maximise()
 	w.lastWidth, w.lastHeight = w.size()
 	globalApplication.dispatchOnMainThread(func() {
 		x, y, width, height, scale := w.getCurrentMonitorGeometry()
 		if x == -1 && y == -1 && width == -1 && height == -1 {
 			return
 		}
-		fmt.Println("fullscreen", width, height, scale)
+		fmt.Println("fullscreen", x, y, width, height, scale)
 		w.setMinMaxSize(0, 0, width*scale, height*scale)
 		w.setSize(width*scale, height*scale)
 		C.gtk_window_fullscreen(C.GTKWINDOW(w.window))
@@ -240,31 +241,29 @@ func (w *linuxWebviewWindow) on(eventID uint) {
 }
 
 func (w *linuxWebviewWindow) zoom() {
-	fmt.Println("zoom")
-	//C.windowZoom(w.nsWindow)
+	w.zoomIn()
 }
 
 func (w *linuxWebviewWindow) windowZoom() {
-	fmt.Println("windowZoom")
-	//	C.windowZoom(w.nsWindow)
+	w.zoom() // FIXME> This should be removed
 }
 
 func (w *linuxWebviewWindow) close() {
-	fmt.Println("close")
 	C.gtk_window_close(C.GTKWINDOW(w.window))
 }
 
 func (w *linuxWebviewWindow) zoomIn() {
-	//	lvl := C.webkit_web_view_get_zoom_level()
-	fmt.Println("zoomIn")
+	lvl := C.webkit_web_view_get_zoom_level(C.WEBKITWEBVIEW(w.webview))
+	C.webkit_web_view_set_zoom_level(C.WEBKITWEBVIEW(w.webview), lvl+0.5)
 }
 
 func (w *linuxWebviewWindow) zoomOut() {
-	fmt.Println("zoomOut")
+	lvl := C.webkit_web_view_get_zoom_level(C.WEBKITWEBVIEW(w.webview))
+	C.webkit_web_view_set_zoom_level(C.WEBKITWEBVIEW(w.webview), lvl-0.5)
 }
 
 func (w *linuxWebviewWindow) zoomReset() {
-	fmt.Println("zoomReset")
+	C.webkit_web_view_set_zoom_level(C.WEBKITWEBVIEW(w.webview), 0.0)
 }
 
 func (w *linuxWebviewWindow) toggleDevTools() {
