@@ -505,15 +505,6 @@ func (w *linuxWebviewWindow) run() {
 		w.setZoom(w.parent.options.Zoom)
 		w.enableDevTools()
 		w.setBackgroundColour(w.parent.options.BackgroundColour)
-
-		// FIXME: This should either use the Linux options or a common set
-		macOptions := w.parent.options.Mac
-		switch macOptions.Backdrop {
-		case MacBackdropTransparent, MacBackdropTranslucent:
-			w.setTransparent()
-		}
-
-		//		titleBarOptions := macOptions.TitleBar
 		w.setFrameless(w.parent.options.Frameless)
 
 		switch w.parent.options.StartState {
@@ -561,6 +552,9 @@ func (w *linuxWebviewWindow) setTransparent() {
 func (w *linuxWebviewWindow) setBackgroundColour(colour *RGBA) {
 	if colour == nil {
 		return
+	}
+	if colour.Alpha != 0 {
+		w.setTransparent()
 	}
 	rgba := C.GdkRGBA{C.double(colour.Red) / 255.0, C.double(colour.Green) / 255.0, C.double(colour.Blue) / 255.0, C.double(colour.Alpha) / 255.0}
 	C.webkit_web_view_set_background_color(C.WEBKITWEBVIEW(w.webview), &rgba)
