@@ -608,8 +608,7 @@ func (w *WebviewWindow) disableSizeConstraints() {
 	if w.impl == nil {
 		return
 	}
-	w.impl.setMinSize(0, 0)
-	w.impl.setMaxSize(0, 0)
+	w.impl.disableSizeConstraints()
 }
 
 func (w *WebviewWindow) enableSizeConstraints() {
