@@ -120,6 +120,16 @@ func (m *linuxApp) destroy() {
 	C.gtk_main_quit()
 }
 
+func (m *linuxApp) getPrimaryScreen() (*Screen, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *linuxApp) getScreens() ([]*Screen, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func newPlatformApp(parent *App) *linuxApp {
 	name := strings.ToLower(strings.Replace(parent.options.Name, " ", "", -1))
 	if name == "" {
