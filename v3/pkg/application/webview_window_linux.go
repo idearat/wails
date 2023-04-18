@@ -12,11 +12,6 @@ package application
 #include <limits.h>
 #include <stdint.h>
 
-typedef struct Window
-{
-    uint id;
-} Window;
-
 GdkWindow *GDKWINDOW(void *pointer)
 {
     return GDK_WINDOW(pointer);
@@ -58,9 +53,9 @@ WebKitUserContentManager* WEBKITUSERCONTENTMANAGER(void *pointer) {
 extern void processURLRequest(uint, void*);
 
 void processRequest(void *request, gpointer data) {
-    struct Window *window = data;
-    printf("processRequest: %d\n", window->id);
-    processURLRequest(window->id, request);
+    uint *window = data;
+    printf("processRequest: %d\n", *window);
+    processURLRequest(*window, request);
 }
 */
 import "C"
@@ -90,7 +85,6 @@ type linuxWebviewWindow struct {
 	parent      *WebviewWindow
 	menubar     *C.GtkWidget
 	vbox        *C.GtkWidget
-	metadata    C.Window
 	/*
 		menu                          *menu.Menu
 		accels                                   *C.GtkAccelGroup
@@ -105,11 +99,12 @@ func (w *linuxWebviewWindow) newWebview(gpuPolicy int) unsafe.Pointer {
 	C.webkit_user_content_manager_register_script_message_handler(manager, external)
 	C.free(unsafe.Pointer(external))
 	webview := C.webkit_web_view_new_with_user_content_manager(manager)
-	//gtk_container_add(GTK_CONTAINER(window), webview);
-	w.metadata.id = C.uint(w.parent.id)
+	//gtk_container_add(GTK_CONTAINER(window), webview); // do we need this?
+
 	wails := C.CString("wails")
+	id := C.uint(w.parent.id)
 	C.webkit_web_context_register_uri_scheme(C.webkit_web_context_get_default(), wails,
-		C.WebKitURISchemeRequestCallback(C.processRequest), C.gpointer(&w.metadata), nil)
+		C.WebKitURISchemeRequestCallback(C.processRequest), C.gpointer(&id), nil)
 	C.free(unsafe.Pointer(wails))
 
 	//C.g_signal_connect(C.GTKWIDGET(w.window), "delete-event", G_CALLBACK(gtk_widget_hide_on_delete), NULL)
@@ -169,7 +164,19 @@ func (w *linuxWebviewWindow) setFrameless(frameless bool) {
 }
 
 func (w *linuxWebviewWindow) getScreen() (*Screen, error) {
-	return getScreenForWindow(w)
+	mx, my, width, height, scale := w.getCurrentMonitorGeometry()
+	return &Screen{
+		ID:        fmt.Sprintf("%d", w.id),            // A unique identifier for the display
+		Name:      w.parent.Name(),                    // The name of the display
+		Scale:     float32(scale),                     // The scale factor of the display
+		X:         mx,                                 // The x-coordinate of the top-left corner of the rectangle
+		Y:         my,                                 // The y-coordinate of the top-left corner of the rectangle
+		Size:      Size{Width: width, Height: height}, // The size of the display
+		Bounds:    Rect{},                             // The bounds of the display
+		WorkArea:  Rect{},                             // The work area of the display
+		IsPrimary: false,                              // Whether this is the primary display
+		Rotation:  0.0,                                // The rotation of the display
+	}, nil
 }
 
 func (w *linuxWebviewWindow) show() {

@@ -3,6 +3,10 @@
 package application
 
 /*
+#cgo linux pkg-config: gtk+-3.0 webkit2gtk-4.0
+
+#include <gtk/gtk.h>
+#include <gdk/gdk.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -29,58 +33,65 @@ int GetNumScreens(){
     return 0;
 }
 
+extern GtkApplication *GTKAPPLICATION(void *pointer);
+
+extern GdkWindow *GDKWINDOW(void *pointer);
 */
 import "C"
 import (
 	"fmt"
+	"sync"
+	"unsafe"
 )
 
-func cScreenToScreen(screen C.Screen) *Screen {
+func (m *linuxApp) getPrimaryScreen() (*Screen, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *linuxApp) getScreenByIndex(display *C.struct__GdkDisplay, index int) *Screen {
+	monitor := C.gdk_display_get_monitor(display, C.int(index))
+
+	// TODO: Do we need to update Screen to contain current info?
+	//	currentMonitor := C.gdk_display_get_monitor_at_window(display, window)
+
+	var geometry C.GdkRectangle
+	C.gdk_monitor_get_geometry(monitor, &geometry)
+	primary := false
+	if C.gdk_monitor_is_primary(monitor) == 1 {
+		primary = true
+	}
 
 	return &Screen{
+		IsPrimary: primary,
+		Scale:     1.0,
+		X:         int(geometry.x),
+		Y:         int(geometry.y),
 		Size: Size{
-			Width:  int(screen.p_width),
-			Height: int(screen.p_height),
+			Height: int(geometry.height),
+			Width:  int(geometry.width),
 		},
-		Bounds: Rect{
-			X:      int(screen.x),
-			Y:      int(screen.y),
-			Height: int(screen.height),
-			Width:  int(screen.width),
-		},
-		WorkArea: Rect{
-			X:      int(screen.w_x),
-			Y:      int(screen.w_y),
-			Height: int(screen.w_height),
-			Width:  int(screen.w_width),
-		},
-		Scale:     float32(screen.scale),
-		ID:        C.GoString(screen.id),
-		Name:      C.GoString(screen.name),
-		IsPrimary: bool(screen.isPrimary),
-		Rotation:  float32(screen.rotation),
 	}
 }
 
-func getPrimaryScreen() (*Screen, error) {
-	//	cScreen := C.GetPrimaryScreen()
-
-	return nil, fmt.Errorf("not implemented")
-}
-
-func getScreens() ([]*Screen, error) {
-	// cScreens := C.getAllScreens()
-	// defer C.free(unsafe.Pointer(cScreens))
-	// numScreens := int(C.GetNumScreens())
-	// displays := make([]*Screen, numScreens)
-	// cScreenHeaders := (*[1 << 30]C.Screen)(unsafe.Pointer(cScreens))[:numScreens:numScreens]
-	// for i := 0; i < numScreens; i++ {
-	// 	displays[i] = cScreenToScreen(cScreenHeaders[i])
-	// }
-	return nil, fmt.Errorf("not implemented")
+func (m *linuxApp) getScreens() ([]*Screen, error) {
+	var wg sync.WaitGroup
+	var screens []*Screen
+	wg.Add(1)
+	globalApplication.dispatchOnMainThread(func() {
+		window := C.gtk_application_get_active_window(C.GTKAPPLICATION(m.application))
+		display := C.gdk_window_get_display(C.GDKWINDOW(unsafe.Pointer(window)))
+		count := C.gdk_display_get_n_monitors(display)
+		for i := 0; i < int(count); i++ {
+			screens = append(screens,
+				m.getScreenByIndex(display, i),
+			)
+		}
+		wg.Done()
+	})
+	wg.Wait()
+	return screens, nil
 }
 
 func getScreenForWindow(window *linuxWebviewWindow) (*Screen, error) {
-	//	cScreen := C.getScreenForWindow(window.nsWindow)
-	return nil, fmt.Errorf("not implemented")
+	return window.getScreen()
 }

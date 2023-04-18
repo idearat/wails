@@ -32,6 +32,7 @@ static int run(void *app) {
 }
 
 extern GtkApplication *GTKAPPLICATION(void *pointer);
+
 */
 import "C"
 import (
@@ -78,10 +79,10 @@ func (m *linuxApp) setIcon(icon []byte) {
 }
 
 func (m *linuxApp) name() string {
-	return "not implemented"
 	// appName := C.getAppName()
 	// defer C.free(unsafe.Pointer(appName))
 	// return C.GoString(appName)
+	return ""
 }
 
 func (m *linuxApp) getCurrentWindowID() uint {
@@ -120,16 +121,6 @@ func (m *linuxApp) destroy() {
 	C.gtk_main_quit()
 }
 
-func (m *linuxApp) getPrimaryScreen() (*Screen, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *linuxApp) getScreens() ([]*Screen, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
 func newPlatformApp(parent *App) *linuxApp {
 	name := strings.ToLower(strings.Replace(parent.options.Name, " ", "", -1))
 	if name == "" {
@@ -139,6 +130,7 @@ func newPlatformApp(parent *App) *linuxApp {
 	app := &linuxApp{
 		parent:      parent,
 		application: unsafe.Pointer(C.init(nameC)),
+		//		name:        fmt.Sprintf("org.wails.%s", name),
 	}
 	C.free(unsafe.Pointer(nameC))
 	return app
