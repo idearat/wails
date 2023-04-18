@@ -591,7 +591,8 @@ func (w *linuxWebviewWindow) position() (int, int) {
 }
 
 func (w *linuxWebviewWindow) destroy() {
-	fmt.Println("destroy")
+	C.gtk_widget_destroy(C.GTKWIDGET(w.window))
+	C.gtk_widget_destroy(C.GTKWIDGET(w.webview))
 }
 
 func (w *linuxWebviewWindow) setHTML(html string) {
@@ -600,9 +601,10 @@ func (w *linuxWebviewWindow) setHTML(html string) {
 	//	cHTML := C.CString(html)
 	// Render HTML
 	// FIXME: What are we replacing?
-	/*	C.webkit_web_view_load_alternate_html (C.WEBKITWEBVIEW(w.webview),
-		const gchar *content,
-		const gchar *content_uri,
-		const gchar *base_uri);
+	/*
+		C.webkit_web_view_load_alternate_html (C.WEBKITWEBVIEW(w.webview),
+						const gchar *content,
+						const gchar *content_uri,
+						const gchar *base_uri);
 	*/
 }
