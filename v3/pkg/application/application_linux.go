@@ -10,20 +10,29 @@ package application
 #include <limits.h>
 #include <stdint.h>
 
+typedef struct App {
+  void *app;
+} App;
+
 extern void processApplicationEvent(uint);
+
+extern void activateLinux(gpointer data);
 
 static void activate (GtkApplication* app, gpointer data) {
    // FIXME: should likely emit a WAILS specific code
    // events.Mac.EventApplicationDidFinishLaunching == 1032
-   processApplicationEvent(1032);
+   //processApplicationEvent(1032);
+
+   activateLinux(data);
 }
 
 static GtkApplication* init(char* name) {
+   printf("gtk_application_new()\n");
    return gtk_application_new(name, G_APPLICATION_DEFAULT_FLAGS);
 }
 
-static int run(void *app) {
-  g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);
+static int run(void *app, void *data) {
+  g_signal_connect (app, "activate", G_CALLBACK (activate), data);
   g_application_hold(app);  // allows it to run without a window
   int status = g_application_run (G_APPLICATION (app), 0, NULL);
   g_application_release(app);
@@ -57,10 +66,11 @@ type linuxApp struct {
 	application     unsafe.Pointer
 	applicationMenu unsafe.Pointer
 	parent          *App
+
+	startupActions []func() // startupActions should contain actions to take after `activate` signal arrival
 }
 
 func (m *linuxApp) hide() {
-
 	//	C.hide()
 }
 
@@ -75,7 +85,26 @@ func (m *linuxApp) on(eventID uint) {
 }
 
 func (m *linuxApp) setIcon(icon []byte) {
-	//	C.setApplicationIcon(unsafe.Pointer(&icon[0]), C.int(len(icon)))
+	/* // FIXME: WIP
+	   loader := C.gdk_pixbuf_loader_new()
+
+	   	if loader == nil {
+	   		return
+	   	}
+
+	   loaded := C.gdk_pixbuf_loader_write(loader, (*C.guchar)(&icon[0]), (C.gsize)(len(icon)), 0)
+
+	   	if loaded == C.bool(1) && C.gdk_pixbuf_loader_close(loader, 0) {
+	   		pixbuf := C.gdk_pixbuf_loader_get_pixbuf(loader)
+	   		if pixbuf != nil {
+	   			ww := m.parent.CurrentWindow()
+	   			window := ww.impl.window
+	   			C.gtk_window_set_icon(window, pixbuf)
+	   		}
+	   	}
+
+	   C.g_object_unref(loader)
+	*/
 }
 
 func (m *linuxApp) name() string {
@@ -94,15 +123,21 @@ func (m *linuxApp) getCurrentWindowID() uint {
 	return uint(0)
 }
 
+func (m *linuxApp) afterActivation(fn func()) {
+	m.startupActions = append(m.startupActions, fn)
+}
+
 func (m *linuxApp) setApplicationMenu(menu *Menu) {
 	if menu == nil {
 		// Create a default menu
 		menu = defaultApplicationMenu()
 	}
-	menu.Update()
-	// Convert impl to linuxMenu object
-	//	m.applicationMenu = (menu.impl).(*linuxMenu).menuModel
-	//C.gtk_application_set_app_menu(m.application, m.applicationMenu);
+	globalApplication.dispatchOnMainThread(func() {
+		fmt.Println("afterActivation")
+		menu.Update()
+		m.applicationMenu = (menu.impl).(*linuxMenu).native
+		fmt.Println("afterActivation", m.applicationMenu)
+	})
 }
 
 func (m *linuxApp) run() error {
@@ -112,13 +147,14 @@ func (m *linuxApp) run() error {
 	m.parent.On(events.Mac.ApplicationDidFinishLaunching, func() {
 		// Do we need to do anything now?
 	})
-
-	C.run(m.application)
+	var app C.App
+	app.app = unsafe.Pointer(m)
+	C.run(m.application, m.application)
 	return nil
 }
 
 func (m *linuxApp) destroy() {
-	C.gtk_main_quit()
+	C.g_application_quit((*C.GApplication)(m.application))
 }
 
 func newPlatformApp(parent *App) *linuxApp {
@@ -134,6 +170,20 @@ func newPlatformApp(parent *App) *linuxApp {
 	}
 	C.free(unsafe.Pointer(nameC))
 	return app
+}
+
+// executeStartupActions is called by `activateLinux` below to execute
+// code which needs to be run after the 'activate' signal is received
+func (m *linuxApp) executeStartupActions() {
+	for _, fn := range m.startupActions {
+		fn()
+	}
+}
+
+//export activateLinux
+func activateLinux(data unsafe.Pointer) {
+	app := (globalApplication.impl).(*linuxApp)
+	app.executeStartupActions()
 }
 
 //export processApplicationEvent

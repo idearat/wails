@@ -142,7 +142,16 @@ func (w *linuxWebviewWindow) openContextMenu(menu *Menu, data *ContextMenuData) 
 	thisMenu := newMenuImpl(menu)
 	thisMenu.update()
 	fmt.Println("linux.openContextMenu()")
-	//C.windowShowMenu(w.nsWindow, thisMenu.nsMenu, C.int(data.X), C.int(data.Y))
+	/*	void
+		gtk_menu_popup_at_rect (
+		  GtkMenu* menu,
+		  GdkWindow* rect_window,
+		  const GdkRectangle* rect,
+		  GdkGravity rect_anchor,
+		  GdkGravity menu_anchor,
+		  const GdkEvent* trigger_event
+		)
+	*/
 }
 
 func (w *linuxWebviewWindow) getZoom() float64 {
@@ -398,9 +407,12 @@ func (w *linuxWebviewWindow) setAlwaysOnTop(alwaysOnTop bool) {
 }
 
 func newWindowImpl(parent *WebviewWindow) *linuxWebviewWindow {
+	//	(*C.struct__GtkWidget)(m.native)
+	//var menubar *C.struct__GtkWidget
 	return &linuxWebviewWindow{
 		application: (globalApplication.impl).(*linuxApp).application,
 		parent:      parent,
+		//		menubar:     menubar,
 	}
 }
 
@@ -449,11 +461,13 @@ func (w *linuxWebviewWindow) setMaxSize(width, height int) {
 }
 
 func (w *linuxWebviewWindow) setResizable(resizable bool) {
-	if resizable {
-		C.gtk_window_set_resizable(C.GTKWINDOW(w.window), 1)
-	} else {
-		C.gtk_window_set_resizable(C.GTKWINDOW(w.window), 0)
-	}
+	globalApplication.dispatchOnMainThread(func() {
+		if resizable {
+			C.gtk_window_set_resizable(C.GTKWINDOW(w.window), 1)
+		} else {
+			C.gtk_window_set_resizable(C.GTKWINDOW(w.window), 0)
+		}
+	})
 }
 
 func (w *linuxWebviewWindow) enableDevTools() {
@@ -490,20 +504,56 @@ func (w *linuxWebviewWindow) height() int {
 	return height
 }
 
+func createMenu() unsafe.Pointer {
+	app := (globalApplication.impl).(*linuxApp)
+	menu := app.applicationMenu
+	fmt.Println("createMenu", menu)
+	bar := menu
+	//	bar := unsafe.Pointer(C.gtk_menu_bar_new())
+	//	item := unsafe.Pointer(C.gtk_menu_item_new_with_label(C.CString("Testing")))
+
+	//C.gtk_menu_shell_append(
+	//	(*C.GtkMenuShell)(bar),
+	//	(*C.GtkWidget)(item))
+
+	/*
+		fileMi := unsafe.Pointer(C.gtk_menu_item_new_with_label(C.CString("File")))
+		quitMi := unsafe.Pointer(C.gtk_menu_item_new_with_label(C.CString("Quit")))
+
+		//gtk_menu_item_set_submenu(GTK_MENU_ITEM(fileMi), fileMenu);
+
+		C.gtk_menu_item_set_submenu((*C.GtkMenuItem)(fileMi), (*C.GtkWidget)(menu))
+		C.gtk_menu_shell_append((*C.GtkMenuShell)(menu), (*C.GtkWidget)(quitMi))
+		C.gtk_menu_shell_append((*C.GtkMenuShell)(bar), (*C.GtkWidget)(fileMi))
+	*/
+
+	return bar
+}
+
 func (w *linuxWebviewWindow) run() {
 	for eventId := range w.parent.eventListeners {
 		w.on(eventId)
 	}
+	//(*C.struct__GtkWidget)
+
+	//	w.menubar = (*C.struct__GtkWidget)(app.applicationMenu)
+	//	app := (globalApplication.impl).(*linuxApp)
+	//	menubar := C.gtk_menu_bar_new()
+	//	C.gtk_menu_shell_append(menubar, (*C.struct__GtkWidget)(app.applicationMenu))
+
 	globalApplication.dispatchOnMainThread(func() {
 		w.window = unsafe.Pointer(C.gtk_application_window_new(C.GTKAPPLICATION(w.application)))
 		C.g_object_ref_sink(C.gpointer(w.window))
 		w.webview = w.newWebview(1)
 		w.vbox = C.gtk_box_new(C.GTK_ORIENTATION_VERTICAL, 0)
 		C.gtk_container_add(C.GTKCONTAINER(w.window), w.vbox)
-		if w.menubar != nil {
-			C.gtk_box_pack_start(C.GTKBOX(unsafe.Pointer(w.vbox)), w.menubar, 0, 0, 0)
+		if true {
+			bar := createMenu()
+			C.gtk_box_pack_start(C.GTKBOX(unsafe.Pointer(w.vbox)), (*C.GtkWidget)(bar), 0, 0, 0)
+			fmt.Println("packed", bar)
 		}
 		C.gtk_box_pack_start(C.GTKBOX(unsafe.Pointer(w.vbox)), C.GTKWIDGET(w.webview), 1, 1, 0)
+
 		w.setTitle(w.parent.options.Title)
 		w.setAlwaysOnTop(w.parent.options.AlwaysOnTop)
 		w.setResizable(!w.parent.options.DisableResize)
@@ -591,8 +641,9 @@ func (w *linuxWebviewWindow) position() (int, int) {
 }
 
 func (w *linuxWebviewWindow) destroy() {
-	C.gtk_widget_destroy(C.GTKWIDGET(w.window))
-	C.gtk_widget_destroy(C.GTKWIDGET(w.webview))
+	C.gtk_window_close((*C.GtkWindow)(w.window))
+	//C.gtk_widget_destroy(C.GTKWIDGET(w.window))
+	//	C.gtk_widget_destroy(C.GTKWIDGET(w.webview))
 }
 
 func (w *linuxWebviewWindow) setHTML(html string) {
@@ -602,7 +653,7 @@ func (w *linuxWebviewWindow) setHTML(html string) {
 	// Render HTML
 	// FIXME: What are we replacing?
 	/*
-		C.webkit_web_view_load_alternate_html (C.WEBKITWEBVIEW(w.webview),
+		       C.webkit_web_view_load_alternate_html (C.WEBKITWEBVIEW(w.webview),
 						const gchar *content,
 						const gchar *content_uri,
 						const gchar *base_uri);
