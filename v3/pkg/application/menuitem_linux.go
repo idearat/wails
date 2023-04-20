@@ -20,13 +20,16 @@ import (
 import "C"
 
 type linuxMenuItem struct {
-	menuItem *MenuItem
-	native   unsafe.Pointer
-	self     unsafe.Pointer
+	menuItem  *MenuItem
+	native    unsafe.Pointer
+	handlerId C.gulong
 }
 
 func (l linuxMenuItem) setTooltip(tooltip string) {
 	globalApplication.dispatchOnMainThread(func() {
+		l.blockSignal()
+		defer l.unBlockSignal()
+
 		value := C.CString(tooltip)
 		C.gtk_widget_set_tooltip_text(
 			(*C.GtkWidget)(l.native),
@@ -35,18 +38,44 @@ func (l linuxMenuItem) setTooltip(tooltip string) {
 	})
 }
 
+func (l linuxMenuItem) blockSignal() {
+	if l.handlerId != 0 {
+		C.g_signal_handler_block(C.gpointer(l.native), l.handlerId)
+	}
+}
+
+func (l linuxMenuItem) unBlockSignal() {
+	if l.handlerId != 0 {
+		C.g_signal_handler_unblock(C.gpointer(l.native), l.handlerId)
+	}
+}
+
 func (l linuxMenuItem) setLabel(s string) {
 	globalApplication.dispatchOnMainThread(func() {
+		l.blockSignal()
+		defer l.unBlockSignal()
 		value := C.CString(s)
 		C.gtk_menu_item_set_label(
 			(*C.GtkMenuItem)(l.native),
 			value)
 		C.free(unsafe.Pointer(value))
+
 	})
 }
 
+func (l linuxMenuItem) isChecked() bool {
+	if C.gtk_check_menu_item_get_active((*C.GtkCheckMenuItem)(l.native)) == C.int(1) {
+		return true
+	}
+	return false
+}
+
 func (l linuxMenuItem) setDisabled(disabled bool) {
+
 	globalApplication.dispatchOnMainThread(func() {
+		l.blockSignal()
+		defer l.unBlockSignal()
+
 		value := C.int(1)
 		if disabled {
 			value = C.int(0)
@@ -58,13 +87,19 @@ func (l linuxMenuItem) setDisabled(disabled bool) {
 }
 
 func (l linuxMenuItem) setChecked(checked bool) {
-	value := C.int(0)
-	if checked {
-		value = C.int(1)
-	}
-	C.gtk_check_menu_item_set_active(
-		(*C.GtkCheckMenuItem)(l.native),
-		value)
+	globalApplication.dispatchOnMainThread(func() {
+		l.blockSignal()
+		defer l.unBlockSignal()
+
+		value := C.int(0)
+		if checked {
+			value = C.int(1)
+		}
+
+		C.gtk_check_menu_item_set_active(
+			(*C.GtkCheckMenuItem)(l.native),
+			value)
+	})
 }
 
 func (l linuxMenuItem) setAccelerator(accelerator *accelerator) {

@@ -22,6 +22,7 @@ var (
 )
 
 func init() {
+	gtkSignalHandlers = map[*C.GtkWidget]C.gulong{}
 	gtkSignalToMenuItem = map[*C.GtkWidget]*MenuItem{}
 }
 
@@ -33,10 +34,16 @@ func handleClick(idPtr unsafe.Pointer) {
 		return
 	}
 
+	//impl := (item.impl).(*linuxMenuItem)
+
 	switch item.itemType {
 	case text, checkbox:
 		processMenuItemClick(C.uint(item.id))
-
+	case radio:
+		menuItem := (item.impl).(*linuxMenuItem)
+		if menuItem.isChecked() {
+			processMenuItemClick(C.uint(item.id))
+		}
 	default:
 		fmt.Println("handleClick", item.itemType, item.id)
 	}
@@ -99,20 +106,22 @@ func (m *linuxMenu) processMenu(menu *Menu) {
 			m.addMenuSeparator(menu)
 		}
 
+	}
+
+	for _, item := range menu.items {
 		if item.callback != nil {
 			m.attachHandler(item)
 		}
-
 	}
+
 }
 
 func (m *linuxMenu) attachHandler(item *MenuItem) {
 	signal := C.CString("activate")
 	defer C.free(unsafe.Pointer(signal))
 
-	//	id := Cuint(item.id)
-	//	data := &id
-	widget := (item.impl).(*linuxMenuItem).native
+	impl := (item.impl).(*linuxMenuItem)
+	widget := impl.native
 	flags := C.GConnectFlags(0)
 	/*
 		gulong
@@ -124,8 +133,6 @@ func (m *linuxMenu) attachHandler(item *MenuItem) {
 		  GConnectFlags connect_flags
 		)
 	*/
-	//
-
 	handlerId := C.g_signal_connect_object(
 		C.gpointer(widget),
 		signal,
@@ -134,8 +141,11 @@ func (m *linuxMenu) attachHandler(item *MenuItem) {
 		flags)
 
 	id := (*C.GtkWidget)(widget)
-	gtkSignalToMenuItem[id] = item
 
+	gtkSignalToMenuItem[id] = item
+	gtkSignalHandlers[id] = handlerId
+
+	impl.handlerId = handlerId
 	fmt.Println("attachHandler", item.id, handlerId)
 }
 
