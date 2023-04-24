@@ -181,6 +181,8 @@ func (m *macosApp) run() error {
 		C.setApplicationShouldTerminateAfterLastWindowClosed(C.bool(m.parent.options.Mac.ApplicationShouldTerminateAfterLastWindowClosed))
 		C.setActivationPolicy(C.int(m.parent.options.Mac.ActivationPolicy))
 		C.activateIgnoringOtherApps()
+
+		m.parent.activate() // we are ready activate the parent
 	})
 	// setup event listeners
 	for eventID := range m.parent.applicationEventListeners {

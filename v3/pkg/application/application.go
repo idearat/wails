@@ -311,63 +311,6 @@ func (a *App) Run() error {
 	a.impl = newPlatformApp(a)
 
 	a.running = true
-	go func() {
-		for {
-			event := <-applicationEvents
-			a.handleApplicationEvent(event)
-		}
-	}()
-	go func() {
-		for {
-			event := <-windowEvents
-			a.handleWindowEvent(event)
-		}
-	}()
-	go func() {
-		for {
-			request := <-webviewRequests
-			a.handleWebViewRequest(request)
-			err := request.Release()
-			if err != nil {
-				a.error("Failed to release webview request: %s", err.Error())
-			}
-		}
-	}()
-	go func() {
-		for {
-			event := <-windowMessageBuffer
-			a.handleWindowMessage(event)
-		}
-	}()
-	go func() {
-		for {
-			dragAndDropMessage := <-windowDragAndDropBuffer
-			a.handleDragAndDropMessage(dragAndDropMessage)
-		}
-	}()
-
-	go func() {
-		for {
-			menuItemID := <-menuItemClicked
-			a.handleMenuItemClicked(menuItemID)
-		}
-	}()
-
-	// run windows
-	for _, window := range a.windows {
-		go window.run()
-	}
-
-	// run system trays
-	for _, systray := range a.systemTrays {
-		go systray.Run()
-	}
-
-	// set the application menu
-	a.impl.setApplicationMenu(a.ApplicationMenu)
-
-	// set the application Icon
-	a.impl.setIcon(a.options.Icon)
 
 	err := a.impl.run()
 	if err != nil {
@@ -443,6 +386,69 @@ func (a *App) handleMenuItemClicked(menuItemID uint) {
 		return
 	}
 	menuItem.handleClick()
+}
+
+// activateCallback is called by the application impl
+func (a *App) activateCallback() {
+
+	// set the application menu
+	a.impl.setApplicationMenu(a.ApplicationMenu)
+
+	// set the application Icon
+	a.impl.setIcon(a.options.Icon)
+
+	go func() {
+		for {
+			event := <-applicationEvents
+			a.handleApplicationEvent(event)
+		}
+	}()
+	go func() {
+		for {
+			event := <-windowEvents
+			a.handleWindowEvent(event)
+		}
+	}()
+	go func() {
+		for {
+			request := <-webviewRequests
+			a.handleWebViewRequest(request)
+			err := request.Release()
+			if err != nil {
+				a.error("Failed to release webview request: %s", err.Error())
+			}
+		}
+	}()
+	go func() {
+		for {
+			event := <-windowMessageBuffer
+			a.handleWindowMessage(event)
+		}
+	}()
+	go func() {
+		for {
+			dragAndDropMessage := <-windowDragAndDropBuffer
+			a.handleDragAndDropMessage(dragAndDropMessage)
+		}
+	}()
+
+	go func() {
+		for {
+			menuItemID := <-menuItemClicked
+			a.handleMenuItemClicked(menuItemID)
+		}
+	}()
+
+	// run windows
+	for _, window := range a.windows {
+		go window.run()
+	}
+
+	// run system trays
+	for _, systray := range a.systemTrays {
+		go systray.Run()
+	}
+
 }
 
 func (a *App) CurrentWindow() *WebviewWindow {
